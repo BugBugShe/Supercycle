@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Supercycle"/>
+<meta name="theme-color" content="#080812"/>
+<title>AI Supercycle Tracker</title>
+
+<!-- PWA Manifest inline -->
+<link rel="manifest" href="data:application/json,%7B%22name%22%3A%22AI%20Supercycle%20Tracker%22%2C%22short_name%22%3A%22Supercycle%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23080812%22%2C%22theme_color%22%3A%22%23080812%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%2520viewBox%3D'0%200%20100%20100'%253E%253Crect%2520width%3D'100'%2520height%3D'100'%2520rx%3D'20'%2520fill%3D'%23080812'%2F%253E%253Ctext%2520y%3D'.9em'%2520font-size%3D'75'%2520x%3D'10'%253E%25F0%259F%259A%2580%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D"/>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:#080812}
+  body{font-family:'DM Mono','Courier New',monospace;color:#e0e0f0;overscroll-behavior:none}
+  #root{height:100%;display:flex;flex-direction:column}
+  ::-webkit-scrollbar{width:3px;background:#0d0d1a}
+  ::-webkit-scrollbar-thumb{background:#2a2a4a;border-radius:2px}
+  input[type=text],input[type=number]{background:rgba(255,255,255,.05);border:1px solid #2a2a3e;color:#e0e0f0;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:13px;outline:none;width:100%}
+  input:focus{border-color:#4a4a7a}
+  button{font-family:inherit;-webkit-appearance:none}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.05em}
+  .upd{display:inline-block;padding:1px 7px;border-radius:4px;font-size:9px;background:rgba(160,196,255,.15);color:#a0c4ff;border:1px solid #a0c4ff44}
+  .live-badge{display:inline-block;padding:1px 7px;border-radius:4px;font-size:9px;background:rgba(118,255,122,.12);color:#76ff7a;border:1px solid #76ff7a44}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .blink{animation:blink 1.4s infinite}
+  .spin{animation:spin .8s linear infinite;display:inline-block}
+  .fadeup{animation:fadeup .3s ease}
+  .card{transition:background .15s}
+  .syne{font-family:'Syne',sans-serif}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<script type="text/babel">
+const {useState,useEffect,useCallback,useRef} = React;
+
+// ─── DATA ────────────────────────────────────────────────────────────────────
+const POSITIONS = [
+  {id:"NVDA",name:"NVIDIA Corp",type:"stock",alloc:1500,pct:15,entry:180,target:260,stop:153,phase:1,week:1},
+  {id:"META",name:"Meta Platforms",type:"stock",alloc:1200,pct:12,entry:614,target:815,stop:522,phase:1,week:1,risk:"⚠️ Potential 20% layoffs — keep stop tight"},
+  {id:"SOXL",name:"Direxion Semi 3X",type:"etf",alloc:1200,pct:12,entry:52,target:74,stop:40,phase:1,week:1},
+  {id:"TQQQ",name:"ProShares QQQ 3X",type:"etf",alloc:800,pct:8,entry:46,target:60,stop:38,phase:1,week:2},
+  {id:"AMD",name:"Advanced Micro Dev",type:"stock",alloc:1000,pct:10,entry:193,target:275,stop:164,phase:1,week:2},
+  {id:"AVGO",name:"Broadcom Inc",type:"stock",alloc:800,pct:8,entry:322,target:445,stop:274,phase:1,week:2},
+  {id:"CRWD",name:"CrowdStrike",type:"stock",alloc:500,pct:5,entry:445,target:515,stop:378,phase:1,week:3,updated:true},
+  {id:"SMH",name:"VanEck Semi ETF",type:"etf",alloc:500,pct:5,entry:378,target:440,stop:320,phase:1,week:3},
+  {id:"NVDA_OPT",name:"NVDA Jul $185/$210",type:"option",alloc:900,pct:9,entry:9,target:25,stop:4.5,phase:2,week:4},
+  {id:"AMD_OPT",name:"AMD Aug $200/$240",type:"option",alloc:600,pct:6,entry:12,target:40,stop:6,phase:2,week:5},
+  {id:"PLTR",name:"Palantir Tech",type:"stock",alloc:500,pct:5,entry:153,target:192,stop:122,phase:2,week:7},
+];
+
+const CATALYSTS = [
+  {id:0,date:"2026-03-16",label:"🔭 NVIDIA GTC 2026 (LIVE)",desc:"Watch Jensen's keynote. Sets NVDA momentum for Apr 1 entry. No capital yet.",urgency:"high",gtc:true},
+  {id:1,date:"2026-04-01",label:"Phase 1 Begins",desc:"Deploy 60% of capital. Enter NVDA + SOXL + call spread.",urgency:"high"},
+  {id:2,date:"2026-04-07",label:"Week 2 Entry",desc:"Add AMD, AVGO, TQQQ.",urgency:"medium"},
+  {id:3,date:"2026-04-14",label:"Week 3 Entry",desc:"Add CRWD ($445 entry), SMH. Reserve $500.",urgency:"medium"},
+  {id:4,date:"2026-04-21",label:"Phase 2 Begins",desc:"Complete allocations. Enter AMD Aug call spread.",urgency:"medium"},
+  {id:5,date:"2026-04-29",label:"META Q1 Earnings 🔥",desc:"Tighten stop to 8% below entry. Gap up 8%+ → take 25% profit.",urgency:"high"},
+  {id:6,date:"2026-05-05",label:"AMD Q1 Earnings 🔥",desc:"Beat+raise = hold. Drop 10%+ = add from cash. Enter PLTR after.",urgency:"high"},
+  {id:7,date:"2026-05-15",label:"Fed Chair Transition ⚠️",desc:"10-yr Treasury > 4.75% → cut leveraged ETFs 50% now.",urgency:"high"},
+  {id:8,date:"2026-05-20",label:"NVDA Q1 Earnings 🚀",desc:"BIGGEST EVENT. Exit spread at 65–70% max profit. Miss = stop-loss spread.",urgency:"critical"},
+  {id:9,date:"2026-06-09",label:"CRWD Earnings (Updated ↑)",desc:"Confirmed Jun 9. Beat = hold. Miss = exit at $378 stop.",urgency:"medium",updated:true},
+  {id:10,date:"2026-06-14",label:"Close Leveraged ETFs ⛔",desc:"MANDATORY: Close SOXL + TQQQ. 90-day limit reached.",urgency:"high"},
+  {id:11,date:"2026-08-21",label:"AMD Options Expiry",desc:"Close AMD spread at 65% of max profit. Hard deadline.",urgency:"high"},
+  {id:12,date:"2026-08-31",label:"Full Portfolio Exit",desc:"Close all positions. Final P&L review.",urgency:"medium"},
+];
+
+const SIGNALS = [
+  {id:"sp",label:"S&P 500 < 6,400",action:"Accelerate ALL buys into Week 1 now",urgency:"high",mk:"sp500",threshold:6400,dir:"below"},
+  {id:"vix",label:"VIX > 35",action:"PAUSE entries 48h. Cut leveraged ETFs 50%",urgency:"critical",mk:"vix",threshold:35,dir:"above"},
+  {id:"oil",label:"Oil > $120 (1wk)",action:"Rotate 20% tech → XOM / CVX / XLE",urgency:"high",mk:"oil",threshold:120,dir:"above"},
+  {id:"tsy",label:"10-yr Treasury > 4.75%",action:"Cut SOXL + TQQQ by 50% immediately",urgency:"critical",mk:"treasury",threshold:4.75,dir:"above"},
+  {id:"hor",label:"Strait of Hormuz reopens",action:"ADD aggressively to growth names within 24h",urgency:"high",mk:null,threshold:null},
+  {id:"pf",label:"Portfolio < $8,000",action:"EMERGENCY: Close ALL leveraged ETFs + options",urgency:"critical",mk:"portfolio",threshold:8000,dir:"below"},
+];
+
+const RULES=[
+  ["Stock stop-loss","-15% from entry (PLTR -20%)"],
+  ["CRWD stop (updated)","$378 · 15% from $445"],
+  ["SOXL stop","-23% · $40 floor"],
+  ["TQQQ stop","-17% · $38 floor"],
+  ["Options stop","-50% of premium"],
+  ["Max lev-ETF hold","90 days · close by Jun 14"],
+  ["Portfolio breaker","<$8k → close all ETFs+options"],
+  ["Profit-take","25% off at target price"],
+  ["Speed-run rule","+40% in 8wk → 50% off"],
+  ["Options exit","65–70% of max profit"],
+];
+
+const TABS = ["Dashboard","Positions","Catalysts","Signals"];
+const today = new Date("2026-03-16");
+const getDays = d => Math.ceil((new Date(d)-today)/86400000);
+const tc = t => t==="stock"?"#76ff7a":t==="etf"?"#ffd166":"#c77dff";
+const tb = t => t==="stock"?"rgba(118,255,122,.1)":t==="etf"?"rgba(255,209,102,.1)":"rgba(199,125,255,.1)";
+
+// ─── APP ─────────────────────────────────────────────────────────────────────
+function App(){
+  const [tab,setTab]     = useState(0);
+  const [nav,setNav]     = useState(0); // bottom nav active
+  const [total,setTotal] = useState(10000);
+  const [pos,setPos]     = useState(() =>
+    POSITIONS.reduce((a,p)=>({...a,[p.id]:{on:false,price:"",out:false,note:""}}),{})
+  );
+  const [mkt,setMkt] = useState({sp500:6632,vix:26.1,oil:99.5,treasury:4.285,prices:{},refreshed:null,asOf:null});
+  const [rs,setRs]   = useState("idle");
+  const [log,setLog] = useState([]);
+  const [err,setErr] = useState("");
+  const scrollRef    = useRef(null);
+
+  // Reset scroll on tab change
+  useEffect(()=>{ if(scrollRef.current) scrollRef.current.scrollTop=0; },[tab]);
+
+  // Derived helpers
+  const liveOrManual = p => {
+    const lp=mkt.prices[p.id]; if(lp) return lp;
+    const mp=parseFloat(pos[p.id]?.price); return isNaN(mp)?null:mp;
+  };
+  const pnl = p => { const v=liveOrManual(p); if(!pos[p.id]?.on||v===null) return null; return ((v-p.entry)/p.entry*100).toFixed(1); };
+  const stopped  = p => { const v=liveOrManual(p); return pos[p.id]?.on&&v!==null&&v<=p.stop; };
+  const targeted = p => { const v=liveOrManual(p); return pos[p.id]?.on&&v!==null&&v>=p.target; };
+
+  const sigs = SIGNALS.map(s=>{
+    if(!s.mk) return {...s,triggered:false,cur:"Manual check"};
+    if(s.mk==="portfolio") return {...s,triggered:total<s.threshold,cur:`$${total.toLocaleString()}`};
+    const v=mkt[s.mk]; const t=s.triggered;
+    const triggered = s.dir==="above"?v>s.threshold:v<s.threshold;
+    return {...s,triggered,cur: s.mk==="treasury"?v.toFixed(3)+"%":s.mk==="oil"?"$"+v.toFixed(2):v.toLocaleString()};
+  });
+  const activeSigs  = sigs.filter(s=>s.triggered);
+  const stopAlerts  = POSITIONS.filter(p=>stopped(p));
+  const tgtAlerts   = POSITIONS.filter(p=>targeted(p));
+  const openPos     = POSITIONS.filter(p=>pos[p.id]?.on);
+  const deployed    = openPos.reduce((s,p)=>s+p.alloc,0);
+  const upcoming    = CATALYSTS.map(c=>({...c,days:getDays(c.date)})).filter(c=>c.days>=0&&c.days<=30).sort((a,b)=>a.days-b.days);
+  const nextCat     = upcoming[0];
+
+  // ── Refresh ─────────────────────────────────────────────────────────────────
+  const doRefresh = useCallback(async()=>{
+    setRs("loading"); setErr(""); setLog([]);
+    const tickers = POSITIONS.filter(p=>p.type!=="option").map(p=>p.id).join(", ");
+    const prompt = `You are a financial data assistant. Use web search to get the LATEST real-time prices RIGHT NOW for: ${tickers}. Also fetch: S&P 500 level, VIX, WTI crude oil USD/barrel, US 10-year Treasury yield percent.
+
+Return ONLY raw JSON (no markdown, no backticks):
+{"prices":{"NVDA":0,"META":0,"AMD":0,"AVGO":0,"CRWD":0,"PLTR":0,"SOXL":0,"TQQQ":0,"SMH":0},"market":{"sp500":0,"vix":0,"oil":0,"treasury":0},"asOf":"date string","changes":["notable moves vs baselines NVDA=180,META=614,AMD=193,AVGO=322,CRWD=445,PLTR=153,SOXL=52,TQQQ=46,SMH=378,SP500=6632,VIX=26.1,OIL=99.5,TREASURY=4.285"]}`;
+    try{
+      const res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,tools:[{type:"web_search_20250305",name:"web_search"}],messages:[{role:"user",content:prompt}]}),
+      });
+      if(!res.ok) throw new Error(`API ${res.status}`);
+      const data = await res.json();
+      let raw = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").replace(/```[\w]*\n?/g,"").trim();
+      const m = raw.match(/\{[\s\S]*\}/); if(!m) throw new Error("No JSON in response");
+      const {prices={},market={},asOf="just now",changes=[]} = JSON.parse(m[0]);
+      setMkt(prev=>({...prev,sp500:market.sp500??prev.sp500,vix:market.vix??prev.vix,oil:market.oil??prev.oil,treasury:market.treasury??prev.treasury,prices,refreshed:new Date().toLocaleTimeString(),asOf}));
+      setPos(prev=>{
+        const n={...prev};
+        for(const [id,price] of Object.entries(prices)) if(n[id]?.on) n[id]={...n[id],price:String(price)};
+        return n;
+      });
+      setLog(changes.length>0?changes:["Prices updated. No major signal changes."]);
+      setRs("done");
+    }catch(e){ setErr(e.message); setRs("error"); }
+  },[]);
+
+  // ── COLORS / HELPERS ────────────────────────────────────────────────────────
+  const C = { green:"#76ff7a", amber:"#ffd166", red:"#ef233c", blue:"#a0c4ff", bg:"#080812", card:"rgba(255,255,255,.025)", border:"#1a1a2e" };
+  const card = (extra={}) => ({background:C.card,border:`1px solid ${C.border}`,borderRadius:12,...extra});
+  const urgCol = u => u==="critical"?C.red:u==="high"?C.amber:C.green;
+
+  // ── DASHBOARD ───────────────────────────────────────────────────────────────
+  const Dashboard = ()=>(
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {/* Market tiles */}
+      <div style={card({padding:14})}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <span style={{fontSize:10,color:"#555",letterSpacing:".08em"}}>📡 {mkt.refreshed?"LIVE DATA":"BASELINE DATA"}</span>
+          {mkt.refreshed&&<span className="live-badge">{mkt.refreshed}</span>}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {[
+            {l:"S&P 500",v:mkt.sp500.toLocaleString(),ok:mkt.sp500>=6400,w:"< 6,400 = BUY"},
+            {l:"VIX",v:mkt.vix.toFixed(1),ok:mkt.vix<=35,w:"> 35 = PAUSE"},
+            {l:"WTI Oil",v:"$"+mkt.oil.toFixed(1),ok:mkt.oil<=120,w:"> $120 = ROTATE"},
+            {l:"10-yr Tsy",v:mkt.treasury.toFixed(3)+"%",ok:mkt.treasury<=4.75,w:"> 4.75% = CUT ETFs"},
+          ].map(m=>(
+            <div key={m.l} style={{background:m.ok?"rgba(255,255,255,.02)":"rgba(239,35,60,.08)",border:`1px solid ${m.ok?C.border:"#ef233c44"}`,borderRadius:10,padding:12}}>
+              <div style={{fontSize:9,color:"#555",marginBottom:4,letterSpacing:".06em"}}>{m.l}</div>
+              <div className="syne" style={{fontSize:18,fontWeight:800,color:m.ok?"#fff":C.red,marginBottom:3}}>{m.v}</div>
+              <div style={{fontSize:9,color:m.ok?"#333":C.red}}>{m.w}</div>
+              <div style={{display:"flex",alignItems:"center",gap:4,marginTop:6}}>
+                <div style={{width:5,height:5,borderRadius:"50%",background:m.ok?C.green:C.red}}/>
+                <span style={{fontSize:9,color:m.ok?C.green:C.red}}>{m.ok?"CLEAR":"TRIGGERED"}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        {[
+          {l:"Deployed",v:`$${deployed.toLocaleString()}`,s:`${Math.round(deployed/100)}% of $10k`},
+          {l:"Positions",v:`${openPos.length}/${POSITIONS.length}`,s:"entered"},
+          {l:"Signals",v:activeSigs.length,s:activeSigs.length>0?"⚠ ACTION":"> all clear",alert:activeSigs.length>0},
+          {l:"Days to Phase 1",v:Math.max(0,getDays("2026-04-01")),s:"Apr 1, 2026"},
+        ].map((s,i)=>(
+          <div key={i} style={{background:s.alert?"rgba(239,35,60,.08)":C.card,border:`1px solid ${s.alert?"#ef233c44":C.border}`,borderRadius:12,padding:14}}>
+            <div style={{fontSize:9,color:"#555",letterSpacing:".07em",marginBottom:6}}>{s.l}</div>
+            <div className="syne" style={{fontSize:22,fontWeight:800,color:s.alert?C.red:"#fff"}}>{s.v}</div>
+            <div style={{fontSize:10,color:s.alert?C.red:"#555",marginTop:2}}>{s.s}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Allocation bars */}
+      <div style={card({padding:14})}>
+        <div style={{fontSize:10,color:"#555",letterSpacing:".08em",marginBottom:12}}>ALLOCATION</div>
+        {POSITIONS.map(p=>{
+          const pv=pnl(p); const lp=mkt.prices[p.id];
+          return(
+          <div key={p.id} style={{marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                <span style={{fontSize:12,fontWeight:500,minWidth:64}}>{p.id}</span>
+                <span className="pill" style={{background:tb(p.type),color:tc(p.type)}}>{p.type}</span>
+                {p.updated&&<span className="upd">UPD</span>}
+                {lp&&<span className="live-badge">${lp}</span>}
+                {stopped(p)&&<span className="blink" style={{fontSize:10,color:C.red}}>⚠</span>}
+                {targeted(p)&&<span style={{fontSize:10,color:C.green}}>🎯</span>}
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {pv!==null&&<span style={{fontSize:11,color:parseFloat(pv)>=0?C.green:C.red,fontWeight:600}}>{parseFloat(pv)>=0?"+":""}{pv}%</span>}
+                <span style={{fontSize:11,color:"#555"}}>{p.pct}%</span>
+              </div>
+            </div>
+            <div style={{height:5,background:"#111",borderRadius:3,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${p.pct*6}%`,background:stopped(p)?C.red:targeted(p)?C.green:pos[p.id]?.on?tc(p.type):"#2a2a3e",borderRadius:3,opacity:pos[p.id]?.on?1:.35,transition:"width .4s"}}/>
+            </div>
+          </div>
+        )})}
+      </div>
+
+      {/* Portfolio value */}
+      <div style={card({padding:14})}>
+        <div style={{fontSize:10,color:"#555",letterSpacing:".08em",marginBottom:10}}>PORTFOLIO VALUE</div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <input type="number" value={total} onChange={e=>setTotal(Number(e.target.value))} style={{fontSize:18,fontWeight:700,color:C.green,width:140,padding:"8px 12px"}}/>
+          <div>
+            <div style={{fontSize:10,color:total>=10000?C.green:C.red,fontWeight:600}}>{total>=10000?"+":""}{((total-10000)/10000*100).toFixed(1)}%</div>
+            <div style={{fontSize:9,color:"#444"}}>vs $10k entry</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── POSITIONS ───────────────────────────────────────────────────────────────
+  const Positions = ()=>(
+    <div>
+      <div style={{fontSize:10,color:"#555",letterSpacing:".08em",marginBottom:14}}>{openPos.length}/{POSITIONS.length} ENTERED{mkt.refreshed?" · LIVE PRICES ACTIVE":""}</div>
+      {[1,2].map(ph=>(
+        <div key={ph} style={{marginBottom:20}}>
+          <div style={{fontSize:10,color:ph===1?C.green:C.amber,letterSpacing:".07em",marginBottom:10,paddingBottom:6,borderBottom:"1px solid #1a1a2e"}}>
+            PHASE {ph} — {ph===1?"FOUNDATION · Apr 1–18":"CATALYST POSITIONING · Apr 21–May 23"}
+          </div>
+          {POSITIONS.filter(p=>p.phase===ph).map(p=>{
+            const st=pos[p.id]; const pv=pnl(p); const lp=mkt.prices[p.id];
+            const stp=stopped(p); const tgt=targeted(p);
+            return(
+              <div key={p.id} className="card" style={{background:stp?"rgba(239,35,60,.06)":tgt?"rgba(118,255,122,.04)":st?.on?"rgba(255,255,255,.03)":C.card,border:`1px solid ${stp?"#ef233c44":tgt?"#76ff7a44":st?.on?"#2a2a4a":C.border}`,borderRadius:12,padding:14,marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:4}}>
+                      <span className="syne" style={{fontWeight:800,fontSize:15}}>{p.id}</span>
+                      <span className="pill" style={{background:tb(p.type),color:tc(p.type)}}>{p.type}</span>
+                      {p.updated&&<span className="upd">UPD</span>}
+                      {lp&&<span className="live-badge">${lp}</span>}
+                      {stp&&<span className="blink pill" style={{background:"rgba(239,35,60,.2)",color:C.red}}>STOP</span>}
+                      {tgt&&<span className="pill" style={{background:"rgba(118,255,122,.15)",color:C.green}}>TARGET</span>}
+                    </div>
+                    <div style={{fontSize:11,color:"#666",marginBottom:6}}>{p.name}</div>
+                    {p.risk&&<div style={{fontSize:10,color:C.amber,background:"rgba(255,209,102,.06)",border:"1px solid #ffd16633",borderRadius:6,padding:"5px 9px",marginBottom:8}}>{p.risk}</div>}
+                    <div style={{display:"flex",gap:12,fontSize:11,flexWrap:"wrap"}}>
+                      <span><span style={{color:"#555"}}>Entry </span><span style={{color:p.updated?"#a0c4ff":"#ddd"}}>${p.entry}</span></span>
+                      <span><span style={{color:"#555"}}>Target </span><span style={{color:C.green}}>${p.target}</span></span>
+                      <span><span style={{color:"#555"}}>Stop </span><span style={{color:p.updated?"#a0c4ff":C.red}}>${p.stop}</span></span>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8,flexShrink:0}}>
+                    {pv!==null&&<div className="syne" style={{fontSize:18,fontWeight:800,color:parseFloat(pv)>=0?C.green:C.red}}>{parseFloat(pv)>=0?"+":""}{pv}%</div>}
+                    <button onClick={()=>setPos(prev=>({...prev,[p.id]:{...prev[p.id],on:!prev[p.id]?.on}}))}
+                      style={{background:st?.on?"rgba(118,255,122,.15)":"rgba(255,255,255,.06)",border:`1px solid ${st?.on?"#76ff7a55":"#2a2a3e"}`,color:st?.on?C.green:"#888",borderRadius:8,padding:"6px 14px",fontSize:11,cursor:"pointer",letterSpacing:".05em"}}>
+                      {st?.on?"✓ IN":"ENTER"}
+                    </button>
+                  </div>
+                </div>
+                {st?.on&&(
+                  <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #111"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                      <div>
+                        <div style={{fontSize:9,color:"#555",marginBottom:4}}>PRICE {lp?"(live)":"(manual)"}</div>
+                        <input type="text" placeholder={`$${p.entry}`} value={st?.price||""} onChange={e=>setPos(prev=>({...prev,[p.id]:{...prev[p.id],price:e.target.value}}))}/>
+                      </div>
+                      <div>
+                        <div style={{fontSize:9,color:"#555",marginBottom:4}}>NOTES</div>
+                        <input type="text" placeholder="Note…" value={st?.note||""} onChange={e=>setPos(prev=>({...prev,[p.id]:{...prev[p.id],note:e.target.value}}))}/>
+                      </div>
+                    </div>
+                    <button onClick={()=>setPos(prev=>({...prev,[p.id]:{...prev[p.id],out:!prev[p.id]?.out}}))}
+                      style={{background:st?.out?"rgba(239,35,60,.15)":"rgba(255,255,255,.03)",border:`1px solid ${st?.out?"#ef233c66":"#2a2a3e"}`,color:st?.out?C.red:"#555",borderRadius:8,padding:"6px 14px",fontSize:11,cursor:"pointer"}}>
+                      {st?.out?"✓ EXITED":"MARK EXITED"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+
+  // ── CATALYSTS ───────────────────────────────────────────────────────────────
+  const Catalysts = ()=>(
+    <div>
+      <div style={{fontSize:10,color:"#555",letterSpacing:".08em",marginBottom:14}}>ALL CATALYSTS & DEADLINES</div>
+      {CATALYSTS.map(c=>{
+        const days=getDays(c.date); const past=days<0;
+        return(
+          <div key={c.id} style={{background:past?"rgba(255,255,255,.01)":c.gtc?"rgba(160,196,255,.05)":c.urgency==="critical"?"rgba(239,35,60,.06)":"rgba(255,209,102,.03)",border:`1px solid ${past?"#111":c.gtc?"#a0c4ff33":c.urgency==="critical"?"#ef233c44":"#ffd16622"}`,borderRadius:12,padding:14,marginBottom:8,opacity:past?.4:1}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",marginBottom:5}}>
+                  {c.urgency==="critical"&&!past&&<span className="blink" style={{color:C.red,fontSize:11}}>●</span>}
+                  <span className="syne" style={{fontWeight:700,fontSize:13}}>{c.label}</span>
+                  {c.updated&&<span className="upd">UPDATED</span>}
+                  <span className="pill" style={{background:urgCol(c.urgency)+"22",color:urgCol(c.urgency)}}>{c.urgency}</span>
+                </div>
+                <div style={{fontSize:11,color:"#666",lineHeight:1.5}}>{c.desc}</div>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <div style={{fontSize:9,color:"#333"}}>{c.date}</div>
+                <div className="syne" style={{fontSize:15,fontWeight:800,marginTop:2,color:past?"#222":days===0?C.red:days<=7?C.amber:C.green}}>
+                  {past?"PAST":days===0?"TODAY":`${days}d`}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ── SIGNALS ─────────────────────────────────────────────────────────────────
+  const Signals = ()=>(
+    <div>
+      <div style={{fontSize:10,color:"#555",letterSpacing:".08em",marginBottom:4}}>SIGNAL MONITOR</div>
+      <div style={{fontSize:11,color:"#333",marginBottom:14}}>Tap Refresh ↑ to auto-check all signals live.</div>
+      {sigs.map(s=>(
+        <div key={s.id} style={{background:s.triggered?(s.urgency==="critical"?"rgba(239,35,60,.1)":"rgba(255,209,102,.07)"):C.card,border:`1px solid ${s.triggered?(s.urgency==="critical"?"#ef233c55":"#ffd16633"):C.border}`,borderRadius:12,padding:14,marginBottom:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                <div style={{width:18,height:18,borderRadius:"50%",background:s.triggered?(s.urgency==="critical"?C.red:C.amber):"#1a1a2e",border:`2px solid ${s.triggered?(s.urgency==="critical"?C.red:C.amber):"#2a2a4a"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  {s.triggered&&<span style={{fontSize:10,fontWeight:700,color:"#000"}}>!</span>}
+                </div>
+                <span style={{fontSize:13,fontWeight:500,color:s.triggered?"#fff":"#888"}}>{s.label}</span>
+              </div>
+              <div style={{fontSize:11,color:"#555",marginBottom:s.triggered?8:0,marginLeft:26}}>
+                Now: <span style={{color:s.triggered?C.amber:"#777"}}>{s.cur}</span>
+              </div>
+              {s.triggered&&(
+                <div className="fadeup" style={{marginLeft:26,background:s.urgency==="critical"?"rgba(239,35,60,.12)":"rgba(255,209,102,.1)",border:`1px solid ${s.urgency==="critical"?"#ef233c44":"#ffd16644"}`,borderRadius:8,padding:"10px 12px",fontSize:12,color:s.urgency==="critical"?C.red:C.amber,fontWeight:500}}>
+                  <div style={{fontSize:9,opacity:.7,marginBottom:3,letterSpacing:".07em"}}>ACTION:</div>
+                  {s.action}
+                </div>
+              )}
+            </div>
+            <span style={{fontSize:11,color:s.triggered?C.amber:"#222",fontWeight:s.triggered?700:400,flexShrink:0}}>
+              {s.triggered?"🚨 ACTIVE":"watching"}
+            </span>
+          </div>
+        </div>
+      ))}
+      <div style={card({padding:14,marginTop:16})}>
+        <div style={{fontSize:10,color:"#555",letterSpacing:".08em",marginBottom:12}}>RISK RULES</div>
+        {RULES.map(([r,v])=>(
+          <div key={r} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid #0f0f1a",gap:12}}>
+            <span style={{fontSize:11,color:"#555"}}>{r}</span>
+            <span style={{fontSize:11,color:"#bbb",fontWeight:500,textAlign:"right"}}>{v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const CONTENT = [<Dashboard/>,<Positions/>,<Catalysts/>,<Signals/>];
+
+  // ─── LAYOUT ─────────────────────────────────────────────────────────────────
+  return(
+    <div style={{height:"100%",display:"flex",flexDirection:"column",background:"#080812"}}>
+
+      {/* ── HEADER ── */}
+      <div style={{flexShrink:0,background:"#0a0a17",borderBottom:"1px solid #1a1a2e",padding:"12px 16px 0",zIndex:50}}>
+        {/* Top bar */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,gap:10}}>
+          <div>
+            <div className="syne" style={{fontSize:16,fontWeight:800,letterSpacing:"-.02em",color:"#fff",lineHeight:1.1}}>
+              SUPERCYCLE <span style={{color:"#76ff7a"}}>TRACKER</span>
+            </div>
+            <div style={{fontSize:9,color:"#444",marginTop:2}}>$10K · Apr–Aug 2026</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{textAlign:"right"}}>
+              <div className="syne" style={{fontSize:18,fontWeight:800,color:"#76ff7a",lineHeight:1}}>${total.toLocaleString()}</div>
+              <div style={{fontSize:9,color:total>=10000?"#76ff7a":"#ef233c"}}>{total>=10000?"+":""}{((total-10000)/10000*100).toFixed(1)}%</div>
+            </div>
+            {/* REFRESH BUTTON */}
+            <button disabled={rs==="loading"} onClick={doRefresh} style={{
+              display:"flex",alignItems:"center",gap:5,
+              background:rs==="error"?"rgba(239,35,60,.12)":"rgba(118,255,122,.1)",
+              border:`1px solid ${rs==="error"?"#ef233c55":"#76ff7a44"}`,
+              borderRadius:10,padding:"8px 12px",
+              color:rs==="error"?"#ef233c":"#76ff7a",
+              fontSize:12,fontWeight:600,cursor:rs==="loading"?"not-allowed":"pointer",
+              opacity:rs==="loading"?.6:1,flexShrink:0,
+            }}>
+              <span className={rs==="loading"?"spin":""} style={{fontSize:15,lineHeight:1}}>
+                {rs==="loading"?"⟳":rs==="error"?"⚠":rs==="done"?"✓":"⟳"}
+              </span>
+              {rs==="loading"?"…":rs==="error"?"Retry":rs==="done"?"Live":"Refresh"}
+            </button>
+          </div>
+        </div>
+
+        {/* Compact alerts */}
+        {stopAlerts.length>0&&<div className="blink fadeup" style={{background:"rgba(239,35,60,.12)",border:"1px solid #ef233c",borderRadius:8,padding:"6px 12px",marginBottom:6,fontSize:11,color:C.red,fontWeight:600}}>🚨 STOP: {stopAlerts.map(p=>p.id).join(", ")} — CLOSE NOW</div>}
+        {tgtAlerts.length>0&&<div className="fadeup" style={{background:"rgba(118,255,122,.07)",border:"1px solid #76ff7a",borderRadius:8,padding:"6px 12px",marginBottom:6,fontSize:11,color:C.green}}>🎯 TARGET HIT: {tgtAlerts.map(p=>p.id).join(", ")}</div>}
+        {activeSigs.length>0&&<div className="fadeup" style={{background:"rgba(239,35,60,.07)",border:"1px solid #ef233c44",borderRadius:8,padding:"6px 12px",marginBottom:6,fontSize:11,color:C.red}}>⚡ SIGNAL: {activeSigs.map(s=>s.label).join(" · ")}</div>}
+        {nextCat&&(
+          <div style={{background:nextCat.gtc?"rgba(160,196,255,.05)":"rgba(255,209,102,.04)",border:`1px solid ${nextCat.gtc?"#a0c4ff33":"#ffd16622"}`,borderRadius:8,padding:"5px 12px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:11,color:nextCat.gtc?"#a0c4ff":"#ffd166"}}>{nextCat.label}</span>
+            <span className="syne" style={{fontSize:12,fontWeight:700,color:nextCat.gtc?"#a0c4ff":"#ffd166"}}>{nextCat.days===0?"TODAY":`${nextCat.days}d`}</span>
+          </div>
+        )}
+
+        {/* Tab bar */}
+        <div style={{display:"flex",borderBottom:"1px solid #111",marginBottom:"-1px"}}>
+          {TABS.map((t,i)=>(
+            <button key={i} onClick={()=>setTab(i)} style={{flex:1,background:"none",border:"none",padding:"8px 4px",fontSize:10,letterSpacing:".05em",textTransform:"uppercase",color:tab===i?"#76ff7a":"#444",borderBottom:tab===i?"2px solid #76ff7a":"2px solid transparent",cursor:"pointer",fontFamily:"inherit",fontWeight:tab===i?600:400}}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── SCROLLABLE CONTENT ── */}
+      <div ref={scrollRef} style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch",padding:"16px 16px 100px"}}>
+        {/* Refresh result shown here, not in header */}
+        {rs==="done"&&log.length>0&&(
+          <div className="fadeup" style={{background:"rgba(118,255,122,.05)",border:"1px solid #76ff7a22",borderRadius:10,padding:12,marginBottom:12}}>
+            <div style={{fontSize:9,color:"#76ff7a",letterSpacing:".08em",marginBottom:6}}>✓ UPDATED · {mkt.refreshed} · {mkt.asOf}</div>
+            {log.map((l,i)=><div key={i} style={{fontSize:11,color:"#777",marginBottom:2}}>· {l}</div>)}
+          </div>
+        )}
+        {rs==="error"&&(
+          <div className="fadeup" style={{background:"rgba(239,35,60,.06)",border:"1px solid #ef233c33",borderRadius:10,padding:12,marginBottom:12}}>
+            <div style={{fontSize:9,color:C.red,letterSpacing:".08em",marginBottom:4}}>⚠ REFRESH FAILED</div>
+            <div style={{fontSize:11,color:"#888"}}>{err}</div>
+          </div>
+        )}
+        {CONTENT[tab]}
+      </div>
+
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+
+<!-- Service Worker registration for offline PWA -->
+<script>
+if('serviceWorker' in navigator){
+  const sw = `
+    const CACHE='supercycle-v1';
+    const ASSETS=['/'];
+    self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
+    self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));
+  `;
+  const blob = new Blob([sw],{type:'application/javascript'});
+  const url  = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(url).catch(()=>{});
+}
+</script>
+</body>
+</html>
