@@ -9,12 +9,27 @@ poll_seconds: 60       # minimum 30; each cycle adds 0-20% random delay
 
 headless: false        # keep false so you can clear CAPTCHAs / OTPs when asked
 
-items:
-  # Use the exact product URL, with the variant you want already selected in the link if it has variants.
-  - name: Pokemon TCG Scarlet & Violet Elite Trainer Box
-    url: https://www.lazada.sg/products/REPLACE-ME-i000000000.html
-    max_price: 80      # unit price ceiling, in local currency
-    quantity: 1        # 1-10
+# The ONLY store the bot will buy from. Every product page's seller link is checked
+# against it before checkout; anything else is skipped, including items listed below.
+store:
+  url: https://s.lazada.sg/s.Tr8yW?c=x   # Pokemon Center on Lazada SG (short link is fine)
+  # slug: pokemon-center-xxx   # set only if auto-detection fails; `check` logs the detected slug
+  discover: true               # watch the store's listing and pick up new TCG products
+  max_price_each: 90           # price ceiling for discovered products
+  quantity: 1
+  refresh_minutes: 15          # how often to re-scan the store listing
+  max_items: 30                # cap on discovered products polled each cycle
+  # Regexes on product names (defaults shown in lazada_bot/config.py):
+  # include: "tcg|trading card|booster|elite trainer|etb|deck|collection|tin"
+  # exclude: "plush|figure|apparel|mug|keychain"
+
+# Optional: specific Pokemon Center products with their own price ceiling.
+# These are still skipped if the seller check fails.
+items: []
+  # - name: Scarlet & Violet Elite Trainer Box
+  #   url: https://www.lazada.sg/products/REPLACE-ME-i000000000.html
+  #   max_price: 80
+  #   quantity: 1
 
 # Optional: phone alerts. Create a bot with @BotFather, then get your chat id from @userinfobot.
 # telegram:
@@ -28,3 +43,4 @@ items:
 #   quantity_increase: ".next-number-picker-handler-up"
 #   checkout_total: ".checkout-order-total-fee"
 #   place_order_text: "place order"
+#   seller_link: ".seller-name__detail a, a[href*='/shop/']"

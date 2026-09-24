@@ -1,10 +1,13 @@
 """Config loading and validation."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+
+from .store import normalize_product_url
 
 # Lazada country sites. VN and ID use "." as the thousands separator.
 DOMAINS = {
@@ -27,7 +30,12 @@ DEFAULT_SELECTORS = {
     "quantity_increase": ".next-number-picker-handler-up",
     "checkout_total": ".checkout-order-total-fee",
     "place_order_text": r"place order|buat pesanan|đặt hàng|สั่งซื้อสินค้า",
+    # Links on a product page that may point at the seller's store.
+    "seller_link": ".seller-name__detail a, .seller-container a, a[href*='/shop/']",
 }
+
+DEFAULT_INCLUDE = r"tcg|trading card|booster|elite trainer|\betb\b|deck|collection|premium|tin|blister|card"
+DEFAULT_EXCLUDE = r"plush|figure|apparel|t-shirt|tee\b|hoodie|mug|keychain|sticker"
 
 
 class ConfigError(ValueError):
@@ -43,9 +51,23 @@ class Item:
 
 
 @dataclass
+class Store:
+    url: str
+    slug: str | None = None           # auto-detected from `url` if not given
+    discover: bool = True             # watch the store's listing for products
+    max_price_each: float | None = None
+    quantity: int = 1
+    include: str = DEFAULT_INCLUDE    # regex on product name
+    exclude: str = DEFAULT_EXCLUDE
+    refresh_minutes: int = 15
+    max_items: int = 30
+
+
+@dataclass
 class Config:
     country: str
     mode: str
+    store: Store
     items: list[Item]
     total_budget: float
     shipping_allowance: float = 0.0
@@ -88,9 +110,12 @@ def parse_config(raw: dict) -> Config:
     _require(isinstance(poll, int) and poll >= MIN_POLL_SECONDS,
              f"poll_seconds must be an integer >= {MIN_POLL_SECONDS}")
 
-    raw_items = raw.get("items") or []
-    _require(raw_items, "at least one item is required")
     domain = DOMAINS[country]
+    store = _parse_store(raw.get("store"), domain)
+
+    raw_items = raw.get("items") or []
+    _require(raw_items or store.discover,
+             "add at least one item, or set store.discover: true")
     items = []
     for i, it in enumerate(raw_items):
         where = f"items[{i}]"
@@ -103,6 +128,7 @@ def parse_config(raw: dict) -> Config:
         qty = it.get("quantity", 1)
         _require(isinstance(qty, int) and 1 <= qty <= 10,
                  f"{where}.quantity must be an integer from 1 to 10")
+        url = normalize_product_url(url)
         items.append(Item(name=str(it.get("name") or url), url=url,
                           max_price=float(max_price), quantity=qty))
 
@@ -113,6 +139,7 @@ def parse_config(raw: dict) -> Config:
     return Config(
         country=country,
         mode=mode,
+        store=store,
         items=items,
         total_budget=float(budget),
         shipping_allowance=float(shipping),
@@ -123,6 +150,43 @@ def parse_config(raw: dict) -> Config:
         telegram_bot_token=tg.get("bot_token"),
         telegram_chat_id=str(tg["chat_id"]) if tg.get("chat_id") else None,
         selectors=selectors,
+    )
+
+
+def _parse_store(raw, domain: str) -> Store:
+    _require(isinstance(raw, dict) and raw.get("url"),
+             "store.url is required (the bot only buys from that store)")
+    url = str(raw["url"])
+    _require("lazada." in url, "store.url must be a Lazada link")
+    discover = bool(raw.get("discover", True))
+    max_price = raw.get("max_price_each")
+    if discover:
+        _require(isinstance(max_price, (int, float)) and max_price > 0,
+                 "store.max_price_each is required and must be > 0 when discover is on")
+    qty = raw.get("quantity", 1)
+    _require(isinstance(qty, int) and 1 <= qty <= 10, "store.quantity must be 1 to 10")
+    refresh = raw.get("refresh_minutes", 15)
+    _require(isinstance(refresh, int) and refresh >= 5, "store.refresh_minutes must be >= 5")
+    max_items = raw.get("max_items", 30)
+    _require(isinstance(max_items, int) and 1 <= max_items <= 100,
+             "store.max_items must be 1 to 100")
+    for key in ("include", "exclude"):
+        if key in raw:
+            try:
+                re.compile(str(raw[key] or ""))
+            except re.error as e:
+                raise ConfigError(f"store.{key} is not a valid regex: {e}") from e
+    slug = raw.get("slug")
+    return Store(
+        url=url,
+        slug=str(slug).lower() if slug else None,
+        discover=discover,
+        max_price_each=float(max_price) if max_price else None,
+        quantity=qty,
+        include=str(raw.get("include", DEFAULT_INCLUDE) or ""),
+        exclude=str(raw.get("exclude", DEFAULT_EXCLUDE) or ""),
+        refresh_minutes=refresh,
+        max_items=max_items,
     )
 
 

@@ -3,10 +3,12 @@ import pytest
 from lazada_bot.config import ConfigError, parse_config
 from lazada_bot.pricing import parse_price, purchase_decision
 from lazada_bot.state import State
+from lazada_bot.store import extract_slug, name_matches, normalize_product_url, product_id, seller_matches
 
 BASE = {
     "country": "sg",
     "total_budget": 200,
+    "store": {"url": "https://s.lazada.sg/s.Tr8yW?c=x", "max_price_each": 100},
     "items": [{"name": "ETB", "url": "https://www.lazada.sg/products/x-i1.html", "max_price": 80}],
 }
 
@@ -27,15 +29,14 @@ def test_parse_price(text, country, expected):
 
 
 def test_decision_fails_closed():
-    kw = dict(max_price=80, quantity=1, spent=0, total_budget=200)
+    kw = dict(seller_ok=True, max_price=80, quantity=1, spent=0, total_budget=200)
     assert purchase_decision(in_stock=True, price=79, **kw)[0]
     assert not purchase_decision(in_stock=False, price=79, **kw)[0]
     assert not purchase_decision(in_stock=True, price=None, **kw)[0]
     assert not purchase_decision(in_stock=True, price=81, **kw)[0]
-    assert not purchase_decision(in_stock=True, price=79, max_price=80, quantity=3,
-                                 spent=0, total_budget=200)[0]
-    assert not purchase_decision(in_stock=True, price=79, max_price=80, quantity=1,
-                                 spent=150, total_budget=200)[0]
+    assert not purchase_decision(**{**kw, "seller_ok": False}, in_stock=True, price=79)[0]
+    assert not purchase_decision(**{**kw, "quantity": 3}, in_stock=True, price=79)[0]
+    assert not purchase_decision(**{**kw, "spent": 150}, in_stock=True, price=79)[0]
 
 
 def test_config_defaults_to_dry_run():
@@ -47,10 +48,14 @@ def test_config_defaults_to_dry_run():
     {"mode": "yolo"},
     {"total_budget": 0},
     {"poll_seconds": 5},
-    {"items": []},
     {"items": [{"url": "https://www.lazada.com.my/products/x.html", "max_price": 10}]},
     {"items": [{"url": "https://www.lazada.sg/products/x.html"}]},
     {"items": [{"url": "https://www.lazada.sg/products/x.html", "max_price": 10, "quantity": 50}]},
+    {"store": None},
+    {"store": {"url": "https://example.com/shop"}},
+    {"store": {"url": "https://s.lazada.sg/x"}},  # discover on, no max_price_each
+    {"store": {"url": "https://s.lazada.sg/x", "discover": False}, "items": []},
+    {"store": {"url": "https://s.lazada.sg/x", "max_price_each": 50, "include": "("}},
 ])
 def test_config_rejects(patch):
     with pytest.raises(ConfigError):
@@ -63,3 +68,49 @@ def test_state_persists(tmp_path):
     s.record("u1", "order_submitted", 42.5)
     s2 = State(path)
     assert s2.is_done("u1") and s2.spent == 42.5
+
+
+def test_items_optional_with_discovery():
+    cfg = parse_config({**BASE, "items": []})
+    assert cfg.store.discover and cfg.items == []
+
+
+def test_item_urls_normalized():
+    cfg = parse_config({**BASE, "items": [
+        {"url": "https://www.lazada.sg/products/x-i1.html?spm=abc#r", "max_price": 5}]})
+    assert cfg.items[0].url == "https://www.lazada.sg/products/x-i1.html"
+
+
+@pytest.mark.parametrize("url,slug", [
+    ("https://www.lazada.sg/shop/pokemon-center-singapore/?spm=a", "pokemon-center-singapore"),
+    ("https://www.lazada.sg/pokemon-center-singapore/?q=All-Products", "pokemon-center-singapore"),
+    ("//www.lazada.sg/shop/Pokemon-Center", "pokemon-center"),
+    ("https://www.lazada.sg/products/etb-i123.html", None),
+    ("https://www.lazada.sg/catalog/?q=pokemon", None),
+    ("https://www.lazada.sg/", None),
+])
+def test_extract_slug(url, slug):
+    assert extract_slug(url) == slug
+
+
+def test_seller_matches():
+    slug = "pokemon-center"
+    assert seller_matches(["https://www.lazada.sg/shop/pokemon-center/?itemId=1"], slug)
+    assert not seller_matches(["https://www.lazada.sg/shop/pokemon-center-resale/"], slug)
+    assert not seller_matches(["https://www.lazada.sg/shop/cardking/"], slug)
+    assert not seller_matches([], slug)
+
+
+def test_product_helpers():
+    u = "https://www.lazada.sg/products/pokemon-etb-i2733-s1234.html?spm=x"
+    assert product_id(u) == "2733"
+    assert normalize_product_url(u) == "https://www.lazada.sg/products/pokemon-etb-i2733-s1234.html"
+    assert product_id("https://www.lazada.sg/shop/x/") is None
+
+
+def test_name_filter_defaults():
+    cfg = parse_config(BASE).store
+    assert name_matches("Pokemon TCG: Scarlet & Violet Elite Trainer Box", cfg.include, cfg.exclude)
+    assert name_matches("Pokémon Trading Card Game Booster Bundle", cfg.include, cfg.exclude)
+    assert not name_matches("Pikachu Plush 20cm", cfg.include, cfg.exclude)
+    assert not name_matches("Pokemon Card Sleeves Keychain", cfg.include, cfg.exclude)

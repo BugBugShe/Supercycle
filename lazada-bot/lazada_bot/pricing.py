@@ -26,9 +26,11 @@ def parse_price(text: str, country: str) -> float | None:
         return None
 
 
-def purchase_decision(*, in_stock: bool, price: float | None, max_price: float,
+def purchase_decision(*, seller_ok: bool, in_stock: bool, price: float | None, max_price: float,
                       quantity: int, spent: float, total_budget: float) -> tuple[bool, str]:
-    """Return (should_buy, reason). Fails closed when price is unknown."""
+    """Return (should_buy, reason). Fails closed when seller or price is unknown."""
+    if not seller_ok:
+        return False, "seller is not the configured store"
     if not in_stock:
         return False, "out of stock"
     if price is None:
