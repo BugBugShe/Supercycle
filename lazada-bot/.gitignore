@@ -1,0 +1,5 @@
+config.yaml
+state.json
+.lazada-profile/
+__pycache__/
+.pytest_cache/

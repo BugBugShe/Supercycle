@@ -1,0 +1,30 @@
+# Copy to config.yaml and edit. config.yaml is gitignored (it may hold your Telegram token).
+
+country: sg            # sg | my | ph | th | vn | id
+mode: dry_run          # dry_run: stop at checkout | confirm: open checkout, you click | auto: place order
+
+total_budget: 300      # hard cap on everything the bot may spend, across restarts (tracked in state.json)
+shipping_allowance: 5  # in auto mode, checkout total must be <= price*qty + this, else it asks you instead
+poll_seconds: 60       # minimum 30; each cycle adds 0-20% random delay
+
+headless: false        # keep false so you can clear CAPTCHAs / OTPs when asked
+
+items:
+  # Use the exact product URL, with the variant you want already selected in the link if it has variants.
+  - name: Pokemon TCG Scarlet & Violet Elite Trainer Box
+    url: https://www.lazada.sg/products/REPLACE-ME-i000000000.html
+    max_price: 80      # unit price ceiling, in local currency
+    quantity: 1        # 1-10
+
+# Optional: phone alerts. Create a bot with @BotFather, then get your chat id from @userinfobot.
+# telegram:
+#   bot_token: "123456:ABC..."
+#   chat_id: "123456789"
+
+# Optional: override if Lazada changes its page markup (run `check` to see what's being read).
+# selectors:
+#   price: ".pdp-price_type_normal"
+#   buy_now_text: "buy now"
+#   quantity_increase: ".next-number-picker-handler-up"
+#   checkout_total: ".checkout-order-total-fee"
+#   place_order_text: "place order"
