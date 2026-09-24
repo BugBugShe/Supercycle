@@ -1,6 +1,6 @@
 # Lazada Pokémon Center TCG bot
 
-Watches the **Pokémon Center store on Lazada** and, when a TCG product is in stock at or under your price, goes to checkout for you. It uses your real logged-in Lazada account in a normal Chromium window, and it has hard spending limits.
+Watches the **Pokémon Center store on Lazada** and, when a sealed TCG product is in stock at or under your price, either **alerts you so you can check out yourself** (the default) or goes to checkout for you. It uses your real logged-in Lazada account in a normal Chromium window, and it has hard spending limits.
 
 ## Store lock
 
@@ -13,7 +13,7 @@ If the store can't be identified, the bot refuses to run. Set `store.slug` by ha
 
 ## Before you use it
 
-Automated purchasing is very likely against Lazada's Terms of Use. The realistic consequences are order cancellation or account suspension. The bot polls slowly (every 30 s at most), never solves CAPTCHAs or bypasses verification, and stops to ask you when Lazada challenges it. If you want less risk, run it in `confirm` mode: the bot does the watching and you click the final button yourself.
+Automated purchasing is very likely against Lazada's Terms of Use. The realistic consequences are order cancellation or account suspension. The bot polls slowly (every 30 s at most), never solves CAPTCHAs or bypasses verification, and stops to ask you when Lazada challenges it. This matters less in the default `notify` mode, which only reads product pages and never touches checkout.
 
 ## Setup
 
@@ -25,7 +25,9 @@ playwright install chromium
 cp config.example.yaml config.yaml   # then edit it
 ```
 
-Log in once. The session is saved to `.lazada-profile/`:
+For alerts on your phone, fill in the `telegram:` section of `config.yaml` (instructions are in the file). Without it, alerts only print in the terminal.
+
+For the buying modes only, log in once. The session is saved to `.lazada-profile/`. `notify` mode doesn't need this.
 
 ```bash
 python -m lazada_bot login
@@ -42,11 +44,12 @@ python -m lazada_bot run     # watch and act according to `mode`
 
 | mode | what happens when an item qualifies |
 |---|---|
-| `dry_run` (default) | goes to checkout, logs the total, does **not** order |
+| `notify` (default) | sends you an alert with the product name, price and link. You check out yourself. Alerts once per restock: an item that stays in stock doesn't alert again until it sells out and comes back. |
+| `dry_run` | goes to checkout, logs the total, does **not** order |
 | `confirm` | goes to checkout, alerts you, and leaves the tab open for you to place the order |
 | `auto` | clicks Place Order, but only if the checkout total is ≤ `max_price × quantity + shipping_allowance` and within the remaining budget. Otherwise it falls back to `confirm`. |
 
-Each item is handled once. `state.json` records what was bought and what was spent, so a restart never re-buys or overspends. Delete an entry from `state.json` to arm that item again.
+In the buying modes, each item is handled once. `state.json` records what was bought and what was spent, so a restart never re-buys or overspends. Delete an entry from `state.json` to arm that item again.
 
 ## Limits you should know about
 

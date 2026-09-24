@@ -152,3 +152,52 @@ def test_over_max_price_skips(tmp_path):
     cfg, bot, notes, pages = make(tmp_path, "auto", price=95)
     run_once(cfg, bot, pages)
     assert not bot.state.is_done(URL)
+
+
+def run_cycles(cfg, bot, pages, product_versions):
+    """Run check_once once per product page version, in one browser session."""
+    visited = []
+
+    def handle(route):
+        url = route.request.url
+        visited.append(url)
+        if url.startswith("https://s.lazada.sg/"):
+            body = f"<script>location.replace({pages['store_redirect']!r})</script>"
+        elif "/products/" in url:
+            body = pages["product"]
+        else:
+            body = STORE
+        route.fulfill(status=200, content_type="text/html", body=body)
+
+    with pw.sync_playwright() as p:
+        os.environ.setdefault("LAZADA_BOT_CHROMIUM", "/opt/pw-browsers/chromium")
+        ctx = launch(p, cfg)
+        ctx.route("**/*", handle)
+        try:
+            for version in product_versions:
+                pages["product"] = version
+                bot.check_once(ctx)
+        finally:
+            ctx.close()
+    return visited
+
+
+def test_notify_alerts_once_per_restock_and_never_checks_out(tmp_path):
+    cfg, bot, notes, pages = make(tmp_path, "notify")
+    in_stock = PRODUCT.format(price=79.9, seller="pokemon-center", disabled="")
+    sold_out = PRODUCT.format(price=79.9, seller="pokemon-center", disabled="disabled")
+    visited = run_cycles(cfg, bot, pages, [in_stock, in_stock, sold_out, in_stock])
+    alerts = [n for n in notes if n.startswith("IN STOCK")]
+    assert len(alerts) == 2  # first sighting, then the restock; not the repeat
+    assert URL in alerts[0] and "79.9" in alerts[0]
+    assert not any("checkout" in u for u in visited)
+    assert not bot.state.is_done(URL) and bot.state.spent == 0
+
+
+def test_notify_ignores_other_sellers_and_high_prices(tmp_path):
+    cfg, bot, notes, pages = make(tmp_path, "notify")
+    run_cycles(cfg, bot, pages, [
+        PRODUCT.format(price=79.9, seller="cardking-reseller", disabled=""),
+        PRODUCT.format(price=95, seller="pokemon-center", disabled=""),
+    ])
+    assert not any(n.startswith("IN STOCK") for n in notes)

@@ -39,8 +39,15 @@ def test_decision_fails_closed():
     assert not purchase_decision(**{**kw, "spent": 150}, in_stock=True, price=79)[0]
 
 
-def test_config_defaults_to_dry_run():
-    assert parse_config(BASE).mode == "dry_run"
+def test_config_defaults_to_notify():
+    assert parse_config(BASE).mode == "notify"
+
+
+def test_budget_optional_only_in_notify_mode():
+    no_budget = {k: v for k, v in BASE.items() if k != "total_budget"}
+    assert parse_config({**no_budget, "mode": "notify"}).total_budget == float("inf")
+    with pytest.raises(ConfigError):
+        parse_config({**no_budget, "mode": "auto"})
 
 
 @pytest.mark.parametrize("patch", [

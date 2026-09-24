@@ -61,6 +61,7 @@ class LazadaBot:
         self.slug: str | None = cfg.store.slug
         self.discovered: dict[str, Item] = {}
         self.last_discovery = 0.0
+        self.available: set[str] = set()  # notify mode: items already alerted as in stock
 
     # --- page helpers -------------------------------------------------------
 
@@ -247,7 +248,16 @@ class LazadaBot:
         self.notify.send(f"Placed order for {item.name}, total {shown}. If Lazada shows a "
                          "payment/OTP step, finish it in the open tab. Verify in My Orders.")
 
+    def _alert_available(self, item: Item, price: float) -> None:
+        """Alert once per restock: again only after the item has gone out of stock."""
+        if item.url in self.available:
+            return
+        self.available.add(item.url)
+        self.notify.send(f"IN STOCK at Pokemon Center: {item.name} for {price:g}\n{item.url}")
+
     def check_once(self, ctx: BrowserContext, buy: bool = True) -> None:
+        """One pass over the watchlist. buy=False (the `check` command) only logs."""
+        notify_only = self.cfg.mode == "notify"
         self.resolve_store(ctx)
         if self.cfg.store.discover and (
                 time.time() - self.last_discovery >= self.cfg.store.refresh_minutes * 60):
@@ -265,9 +275,14 @@ class LazadaBot:
                 ok, reason = purchase_decision(
                     seller_ok=seller, in_stock=in_stock, price=price, max_price=item.max_price,
                     quantity=item.quantity, spent=self.state.spent,
-                    total_budget=self.cfg.total_budget)
-                log.info("[%s] %s -> %s", item.name, reason, "BUY" if ok and buy else "skip")
-                if ok and buy:
+                    total_budget=float("inf") if notify_only else self.cfg.total_budget)
+                action = "skip" if not (ok and buy) else "ALERT" if notify_only else "BUY"
+                log.info("[%s] %s -> %s", item.name, reason, action)
+                if not in_stock or (price is not None and price > item.max_price):
+                    self.available.discard(item.url)  # re-arm for the next restock
+                if ok and buy and notify_only:
+                    self._alert_available(item, price)
+                elif ok and buy:
                     self.checkout(page, item, price)
                     keep_open = not page.is_closed()
             except BlockedError as e:

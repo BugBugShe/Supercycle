@@ -1,10 +1,12 @@
 # Copy to config.yaml and edit. config.yaml is gitignored (it may hold your Telegram token).
 
 country: sg            # sg | my | ph | th | vn | id
-mode: dry_run          # dry_run: stop at checkout | confirm: open checkout, you click | auto: place order
+mode: notify           # notify: alert me, I check out myself (never touches checkout)
+                       # dry_run: stop at checkout | confirm: open checkout, you click | auto: place order
 
-total_budget: 300      # hard cap on everything the bot may spend, across restarts (tracked in state.json)
-shipping_allowance: 5  # in auto mode, checkout total must be <= price*qty + this, else it asks you instead
+# Only used by the buying modes (dry_run / confirm / auto); ignored in notify mode.
+# total_budget: 300      # hard cap on everything the bot may spend, across restarts (tracked in state.json)
+# shipping_allowance: 5  # in auto mode, checkout total must be <= price*qty + this, else it asks you instead
 poll_seconds: 60       # minimum 30; each cycle adds 0-20% random delay
 
 headless: false        # keep false so you can clear CAPTCHAs / OTPs when asked
@@ -33,7 +35,8 @@ items: []
   #   max_price: 80
   #   quantity: 1
 
-# Optional: phone alerts. Create a bot with @BotFather, then get your chat id from @userinfobot.
+# Phone alerts. Without this, alerts only appear in the terminal, so set it up for notify mode:
+# create a bot with @BotFather, send it any message, then get your chat id from @userinfobot.
 # telegram:
 #   bot_token: "123456:ABC..."
 #   chat_id: "123456789"

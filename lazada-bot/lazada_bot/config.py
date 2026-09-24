@@ -19,7 +19,7 @@ DOMAINS = {
     "id": "www.lazada.co.id",
 }
 
-MODES = ("dry_run", "confirm", "auto")
+MODES = ("notify", "dry_run", "confirm", "auto")
 MIN_POLL_SECONDS = 30
 
 # Defaults are best guesses at Lazada's current markup and WILL drift.
@@ -102,12 +102,13 @@ def parse_config(raw: dict) -> Config:
     country = str(raw.get("country", "")).lower()
     _require(country in DOMAINS, f"country must be one of {sorted(DOMAINS)}")
 
-    mode = raw.get("mode", "dry_run")
+    mode = raw.get("mode", "notify")
     _require(mode in MODES, f"mode must be one of {MODES}")
 
-    budget = raw.get("total_budget")
+    # notify mode never spends, so the budget only matters for the buying modes.
+    budget = raw.get("total_budget", float("inf") if mode == "notify" else None)
     _require(isinstance(budget, (int, float)) and budget > 0,
-             "total_budget is required and must be > 0")
+             "total_budget is required and must be > 0 unless mode is notify")
 
     shipping = raw.get("shipping_allowance", 0)
     _require(isinstance(shipping, (int, float)) and shipping >= 0,
