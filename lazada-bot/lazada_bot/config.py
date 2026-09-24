@@ -34,8 +34,15 @@ DEFAULT_SELECTORS = {
     "seller_link": ".seller-name__detail a, .seller-container a, a[href*='/shop/']",
 }
 
-DEFAULT_INCLUDE = r"tcg|trading card|booster|elite trainer|\betb\b|deck|collection|premium|tin|blister|card"
-DEFAULT_EXCLUDE = r"plush|figure|apparel|t-shirt|tee\b|hoodie|mug|keychain|sticker"
+# Sealed product types only. A name must match one of these...
+DEFAULT_INCLUDE = (r"booster|elite trainer|\betb\b|collection|\btins?\b|blister|bundle"
+                   r"|build\s*(?:&|and)\s*battle|\bdecks?\b")
+# ...and none of these: accessories (checked first, so "Deck Box" or "Binder Collection"
+# is rejected), singles/codes, and non-TCG merchandise.
+DEFAULT_EXCLUDE = (r"sleeve|binder|portfolio|album|deck\s*(?:box|case)|card\s*(?:case|holder)"
+                   r"|play\s*mat|top\s*loader|dice|damage counter|storage"
+                   r"|\bsingle\b|code card|\bpromo\b"
+                   r"|plush|figure|apparel|t-shirt|\btee\b|hoodie|mug|keychain|sticker|\bpins?\b")
 
 
 class ConfigError(ValueError):

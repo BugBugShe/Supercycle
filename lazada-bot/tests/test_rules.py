@@ -108,9 +108,26 @@ def test_product_helpers():
     assert product_id("https://www.lazada.sg/shop/x/") is None
 
 
-def test_name_filter_defaults():
+@pytest.mark.parametrize("name,keep", [
+    ("Pokemon TCG: Scarlet & Violet Elite Trainer Box", True),
+    ("Pokémon TCG: Prismatic Evolutions Booster Bundle", True),
+    ("Pokemon TCG Booster Display Box (36 packs)", True),
+    ("Pokémon TCG: Charizard ex Premium Collection", True),
+    ("Pokemon TCG Paldea Partners Mini Tin", True),
+    ("Pokemon TCG 3-Pack Blister", True),
+    ("Pokemon TCG Build & Battle Box", True),
+    ("Pokemon TCG League Battle Deck", True),
+    ("Pokemon TCG Card Sleeves (65)", False),
+    ("Pokemon TCG 9-Pocket Binder", False),
+    ("Pokemon TCG Binder Collection", False),
+    ("Pokemon TCG Deck Box", False),
+    ("Pokemon TCG Elite Trainer Box Card Sleeves", False),
+    ("Pokemon TCG Playmat", False),
+    ("Pokemon TCG Portfolio", False),
+    ("Pokemon TCG Code Card", False),
+    ("Pikachu Plush Collection", False),
+    ("Pokemon Trading Card", False),  # no sealed type named
+])
+def test_name_filter_sealed_only(name, keep):
     cfg = parse_config(BASE).store
-    assert name_matches("Pokemon TCG: Scarlet & Violet Elite Trainer Box", cfg.include, cfg.exclude)
-    assert name_matches("Pokémon Trading Card Game Booster Bundle", cfg.include, cfg.exclude)
-    assert not name_matches("Pikachu Plush 20cm", cfg.include, cfg.exclude)
-    assert not name_matches("Pokemon Card Sleeves Keychain", cfg.include, cfg.exclude)
+    assert name_matches(name, cfg.include, cfg.exclude) is keep

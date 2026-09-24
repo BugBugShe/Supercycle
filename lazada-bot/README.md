@@ -6,7 +6,7 @@ Watches the **Pokémon Center store on Lazada** and, when a TCG product is in st
 
 The bot only buys from the store in `store.url`. At startup it opens that link (short links like `s.lazada.sg/...` work) and reads the store's ID from the page it lands on; `check` logs it. Then:
 
-- **Discovery** (`store.discover: true`): every `refresh_minutes` it scans the store's product listing, keeps products whose names match the TCG `include` regex and not the `exclude` regex (plush, figures, apparel…), and watches up to `max_items` of them, each with price ceiling `max_price_each`. New listings trigger an alert.
+- **Discovery** (`store.discover: true`): every `refresh_minutes` it scans the store's product listing, keeps **sealed** products only: names must match a sealed type (booster, Elite Trainer Box, collection, tin, blister, bundle, deck) and must not match an accessory, single-card or merchandise word (sleeves, binders, deck boxes, playmats, plush…), and watches up to `max_items` of them, each with price ceiling `max_price_each`. New listings trigger an alert.
 - **Seller check on every product page**: before checkout, the product page's seller link must point at the same store. If it doesn't, or the bot can't find the seller link, it skips the product. This applies to items you list by hand too.
 
 If the store can't be identified, the bot refuses to run. Set `store.slug` by hand in that case.

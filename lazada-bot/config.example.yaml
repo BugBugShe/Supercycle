@@ -19,9 +19,11 @@ store:
   quantity: 1
   refresh_minutes: 15          # how often to re-scan the store listing
   max_items: 30                # cap on discovered products polled each cycle
-  # Regexes on product names (defaults shown in lazada_bot/config.py):
-  # include: "tcg|trading card|booster|elite trainer|etb|deck|collection|tin"
-  # exclude: "plush|figure|apparel|mug|keychain"
+  # Product-name filters (regex, case-insensitive). Defaults in lazada_bot/config.py keep
+  # SEALED products only (boosters, ETBs, collections, tins, blisters, decks, bundles)
+  # and reject accessories (sleeves, binders, deck boxes, playmats...), singles and merch.
+  # include: "booster|elite trainer|etb|collection|tin|blister|bundle|deck"
+  # exclude: "sleeve|binder|portfolio|deck box|playmat|plush|figure"
 
 # Optional: specific Pokemon Center products with their own price ceiling.
 # These are still skipped if the seller check fails.
