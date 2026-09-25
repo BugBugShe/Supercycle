@@ -15,8 +15,9 @@ from .state import State
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="lazada_bot")
-    ap.add_argument("command", choices=["login", "check", "run"],
-                    help="login: sign in once; check: report stock/price, never buys; run: watch and buy")
+    ap.add_argument("command", choices=["login", "check", "run", "test-alert"],
+                    help="login: sign in once; check: report stock/price, never buys; "
+                         "run: watch and act per mode; test-alert: send a test notification")
     ap.add_argument("-c", "--config", default="config.yaml")
     args = ap.parse_args(argv)
 
@@ -26,6 +27,15 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ConfigError) as e:
         print(f"Config error: {e}", file=sys.stderr)
         return 2
+
+    if args.command == "test-alert":
+        if not (cfg.telegram_bot_token and cfg.telegram_chat_id):
+            print("No telegram section in config; alerts will only print here.", file=sys.stderr)
+            return 1
+        ok = Notifier(cfg.telegram_bot_token, cfg.telegram_chat_id).send(
+            "Test alert from the Lazada Pokemon Center bot.")
+        print("Sent. Check Telegram." if ok else "Send failed; see the error above.")
+        return 0 if ok else 1
 
     if args.command == "login":
         with sync_playwright() as p:

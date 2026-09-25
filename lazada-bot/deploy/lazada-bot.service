@@ -1,0 +1,20 @@
+# systemd unit: keeps the bot running on an always-on Linux machine and restarts it on crashes.
+# Install (edit User and paths first):
+#   sudo cp deploy/lazada-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now lazada-bot
+# Logs: journalctl -u lazada-bot -f
+[Unit]
+Description=Lazada Pokemon Center TCG bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=YOUR_USER
+WorkingDirectory=/home/YOUR_USER/Supercycle/lazada-bot
+ExecStart=/home/YOUR_USER/Supercycle/lazada-bot/.venv/bin/python -m lazada_bot run -c config.yaml
+Restart=on-failure
+RestartSec=60
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

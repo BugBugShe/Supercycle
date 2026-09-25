@@ -138,3 +138,12 @@ def test_product_helpers():
 def test_name_filter_sealed_only(name, keep):
     cfg = parse_config(BASE).store
     assert name_matches(name, cfg.include, cfg.exclude) is keep
+
+
+def test_relative_paths_resolve_next_to_config(tmp_path):
+    import yaml
+    from lazada_bot.config import load_config
+    (tmp_path / "config.yaml").write_text(yaml.safe_dump(BASE))
+    cfg = load_config(tmp_path / "config.yaml")
+    assert cfg.state_file == str(tmp_path / "state.json")
+    assert cfg.profile_dir == str(tmp_path / ".lazada-profile")

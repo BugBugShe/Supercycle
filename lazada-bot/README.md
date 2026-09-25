@@ -40,6 +40,7 @@ While you're logged in, set a **default shipping address** and a **default payme
 ```bash
 python -m lazada_bot check   # read-only: logs stock and price for each item. Run this first.
 python -m lazada_bot run     # watch and act according to `mode`
+python -m lazada_bot test-alert   # send a test Telegram message
 ```
 
 | mode | what happens when an item qualifies |
@@ -50,6 +51,55 @@ python -m lazada_bot run     # watch and act according to `mode`
 | `auto` | clicks Place Order, but only if the checkout total is ≤ `max_price × quantity + shipping_allowance` and within the remaining budget. Otherwise it falls back to `confirm`. |
 
 In the buying modes, each item is handled once. `state.json` records what was bought and what was spent, so a restart never re-buys or overspends. Delete an entry from `state.json` to arm that item again.
+
+## Deploy
+
+**First, test it on your own computer.** Nothing has been checked against the live Lazada site yet. Run these and make sure they look right before you set up a machine to run it permanently:
+
+```bash
+python -m lazada_bot test-alert   # a Telegram message should arrive
+python -m lazada_bot check        # expect the Pokemon Center store ID, then prices and stock for each product
+```
+
+Then choose where it runs. It has to stay running, since it only alerts while it's up.
+
+| where | good for | catch |
+|---|---|---|
+| **Your own computer** (`python -m lazada_bot run`) | trying it out; buying modes | only works while the computer is awake |
+| **Always-on Linux box at home** (old laptop, mini PC) with systemd | notify mode, 24/7 | needs a spare machine |
+| **Cloud server in Singapore** with Docker | notify mode, 24/7, without hardware at home | data-center IPs are more likely to get CAPTCHAs, and a headless bot can't solve them. It alerts you and skips that round. |
+
+On a server with no screen, set `headless: true` in `config.yaml`. The buying modes need you to log in and occasionally clear a CAPTCHA in the browser window, so keep them on a computer with a screen. `notify` mode needs neither and is the one to run on a server.
+
+### Docker (cloud server or any machine)
+
+```bash
+mkdir data
+cp config.example.yaml data/config.yaml     # edit: headless: true, telegram, prices
+docker build -t lazada-bot .
+docker run --rm -v "$PWD/data:/data" lazada-bot test-alert -c /data/config.yaml
+docker run --rm -v "$PWD/data:/data" lazada-bot check -c /data/config.yaml
+docker run -d --name lazada-bot --restart unless-stopped --shm-size=1g \
+  -v "$PWD/data:/data" lazada-bot
+docker logs -f lazada-bot
+```
+
+`state.json` and the browser profile are saved next to `config.yaml`, which here is `data/`, so they survive restarts and rebuilds. Chromium needs `--shm-size=1g`; without it the browser can crash.
+
+On a cloud provider, pick the smallest Linux VM with **at least 1 GB RAM** in a **Singapore** region, install Docker, copy this folder over, and run the commands above.
+
+### systemd (always-on Linux box)
+
+After the setup steps above, edit `YOUR_USER` and the paths in `deploy/lazada-bot.service`, then:
+
+```bash
+sudo cp deploy/lazada-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now lazada-bot
+journalctl -u lazada-bot -f          # logs
+```
+
+It starts on boot and restarts a minute after any crash.
 
 ## Limits you should know about
 

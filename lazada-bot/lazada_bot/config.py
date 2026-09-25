@@ -200,4 +200,10 @@ def _parse_store(raw, domain: str) -> Store:
 
 def load_config(path: str | Path) -> Config:
     with open(path, encoding="utf-8") as f:
-        return parse_config(yaml.safe_load(f))
+        cfg = parse_config(yaml.safe_load(f))
+    # Relative paths live next to config.yaml, so a mounted /data dir keeps
+    # the login profile and state.json regardless of the working directory.
+    base = Path(path).resolve().parent
+    cfg.profile_dir = str(base / cfg.profile_dir)
+    cfg.state_file = str(base / cfg.state_file)
+    return cfg

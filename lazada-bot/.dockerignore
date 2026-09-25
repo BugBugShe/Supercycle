@@ -1,0 +1,7 @@
+.venv
+.lazada-profile
+state.json
+config.yaml
+tests
+__pycache__
+.pytest_cache
