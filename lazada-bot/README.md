@@ -1,0 +1,119 @@
+# Lazada Pokémon Center TCG bot
+
+Watches the **Pokémon Center store on Lazada** and, when a sealed TCG product is in stock at or under your price, either **alerts you so you can check out yourself** (the default) or goes to checkout for you. It uses your real logged-in Lazada account in a normal Chromium window, and it has hard spending limits.
+
+## Store lock
+
+The bot only buys from the store in `store.url`. At startup it opens that link (short links like `s.lazada.sg/...` work) and reads the store's ID from the page it lands on; `check` logs it. Then:
+
+- **Discovery** (`store.discover: true`): every `refresh_minutes` it scans the store's product listing, keeps **sealed** products only: names must match a sealed type (booster, Elite Trainer Box, collection, tin, blister, bundle, deck) and must not match an accessory, single-card or merchandise word (sleeves, binders, deck boxes, playmats, plush…), and watches up to `max_items` of them, each with price ceiling `max_price_each`. New listings trigger an alert.
+- **Seller check on every product page**: before checkout, the product page's seller link must point at the same store. If it doesn't, or the bot can't find the seller link, it skips the product. This applies to items you list by hand too.
+
+If the store can't be identified, the bot refuses to run. Set `store.slug` by hand in that case.
+
+## Before you use it
+
+Automated purchasing is very likely against Lazada's Terms of Use. The realistic consequences are order cancellation or account suspension. The bot polls slowly (every 30 s at most), never solves CAPTCHAs or bypasses verification, and stops to ask you when Lazada challenges it. This matters less in the default `notify` mode, which only reads product pages and never touches checkout.
+
+## Setup
+
+```bash
+cd lazada-bot
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+playwright install chromium
+cp config.example.yaml config.yaml   # then edit it
+```
+
+For alerts on your phone, fill in the `telegram:` section of `config.yaml` (instructions are in the file). Without it, alerts only print in the terminal.
+
+For the buying modes only, log in once. The session is saved to `.lazada-profile/`. `notify` mode doesn't need this.
+
+```bash
+python -m lazada_bot login
+```
+
+While you're logged in, set a **default shipping address** and a **default payment method**. The bot can't pick either for you. Cash on delivery or a saved wallet gives the fewest extra steps. Cards may still prompt for an OTP.
+
+## Usage
+
+```bash
+python -m lazada_bot check   # read-only: logs stock and price for each item. Run this first.
+python -m lazada_bot run     # watch and act according to `mode`
+python -m lazada_bot test-alert   # send a test Telegram message
+```
+
+| mode | what happens when an item qualifies |
+|---|---|
+| `notify` (default) | sends you an alert with the product name, price and link. You check out yourself. Alerts once per restock: an item that stays in stock doesn't alert again until it sells out and comes back. |
+| `dry_run` | goes to checkout, logs the total, does **not** order |
+| `confirm` | goes to checkout, alerts you, and leaves the tab open for you to place the order |
+| `auto` | clicks Place Order, but only if the checkout total is ≤ `max_price × quantity + shipping_allowance` and within the remaining budget. Otherwise it falls back to `confirm`. |
+
+In the buying modes, each item is handled once. `state.json` records what was bought and what was spent, so a restart never re-buys or overspends. Delete an entry from `state.json` to arm that item again.
+
+## Deploy
+
+**First, test it on your own computer.** Nothing has been checked against the live Lazada site yet. Run these and make sure they look right before you set up a machine to run it permanently:
+
+```bash
+python -m lazada_bot test-alert   # a Telegram message should arrive
+python -m lazada_bot check        # expect the Pokemon Center store ID, then prices and stock for each product
+```
+
+Then choose where it runs. It has to stay running, since it only alerts while it's up.
+
+| where | good for | catch |
+|---|---|---|
+| **Your own computer** (`python -m lazada_bot run`) | trying it out; buying modes | only works while the computer is awake |
+| **Always-on Linux box at home** (old laptop, mini PC) with systemd | notify mode, 24/7 | needs a spare machine |
+| **Cloud server in Singapore** with Docker | notify mode, 24/7, without hardware at home | data-center IPs are more likely to get CAPTCHAs, and a headless bot can't solve them. It alerts you and skips that round. |
+
+On a server with no screen, set `headless: true` in `config.yaml`. The buying modes need you to log in and occasionally clear a CAPTCHA in the browser window, so keep them on a computer with a screen. `notify` mode needs neither and is the one to run on a server.
+
+### Docker (cloud server or any machine)
+
+```bash
+mkdir data
+cp config.example.yaml data/config.yaml     # edit: headless: true, telegram, prices
+docker build -t lazada-bot .
+docker run --rm -v "$PWD/data:/data" lazada-bot test-alert -c /data/config.yaml
+docker run --rm -v "$PWD/data:/data" lazada-bot check -c /data/config.yaml
+docker run -d --name lazada-bot --restart unless-stopped --shm-size=1g \
+  -v "$PWD/data:/data" lazada-bot
+docker logs -f lazada-bot
+```
+
+`state.json` and the browser profile are saved next to `config.yaml`, which here is `data/`, so they survive restarts and rebuilds. Chromium needs `--shm-size=1g`; without it the browser can crash.
+
+On a cloud provider, pick the smallest Linux VM with **at least 1 GB RAM** in a **Singapore** region, install Docker, copy this folder over, and run the commands above.
+
+### systemd (always-on Linux box)
+
+After the setup steps above, edit `YOUR_USER` and the paths in `deploy/lazada-bot.service`, then:
+
+```bash
+sudo cp deploy/lazada-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now lazada-bot
+journalctl -u lazada-bot -f          # logs
+```
+
+It starts on boot and restarts a minute after any crash.
+
+## Limits you should know about
+
+- **The selectors are unverified.** I couldn't reach Lazada from the environment this was built in. The defaults in `config.py` (`.pdp-price_type_normal`, "Buy Now" / "Place Order" text, and so on) are best guesses at Lazada's markup and will drift over time. Run `check` first. If the price comes back as "not found", inspect the page and override `selectors:` in `config.yaml`. Then do a `dry_run` on an in-stock item before you trust `auto`.
+- **"Order submitted" may not mean paid.** Depending on the country and payment method, Lazada may show a payment page or an OTP after Place Order. The bot tells you to finish that step in the open tab. Always check My Orders.
+- **Discovery depends on the store page layout.** It collects `/products/…-i<id>.html` links after scrolling the store's "All Products" page. If Lazada serves that listing some other way, discovery finds nothing and alerts you. You can still list products under `items:`.
+- **Budget vs. discovery:** with discovery on, every matching new listing is a buy candidate. `total_budget` is what stops it buying the whole store, so set it to what you'd actually spend.
+- **Variants:** it buys whatever variant the product URL opens with. It doesn't pick sizes or bundles.
+- **It isn't built to win hyped drops.** Polling every 30–60 s won't beat dedicated scalper bots on a hyped release. It's meant for catching restocks and price drops.
+
+## Tests
+
+```bash
+LAZADA_BOT_CHROMIUM=/path/to/chromium pytest   # the env var is optional
+```
+
+`tests/test_flow.py` runs the whole flow (check, checkout, place order, fallbacks) in a real browser against mock Lazada pages. It doesn't test the real site.
